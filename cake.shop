@@ -1,0 +1,185 @@
+#include <iostream>
+#include <vector>
+#include <memory>
+#include <fstream>
+using namespace std;
+
+// Cake structure
+struct Cake {
+    string name;
+    double price;
+    string description;
+};
+
+// Order structure
+struct Order {
+    vector<shared_ptr<Cake>> cakes;
+    vector<int> pounds;
+    double totalCost = 0.0;
+
+    void calculateTotal() {
+        totalCost = 0.0;
+        for (size_t i = 0; i < cakes.size(); i++) {
+            totalCost += cakes[i]->price * pounds[i];
+        }
+    }
+};
+
+// Customer structure
+struct Customer {
+    string name;
+    string contact;
+};
+
+// Database Schema with File Handling
+class CakeShopDatabase {
+private:
+    vector<shared_ptr<Cake>> cakes;
+    const string cakeFile = "cakes.dat";
+
+    void loadCakes() {
+        ifstream file(cakeFile, ios::binary);
+        if (!file) return;
+        cakes.clear();
+        while (true) {
+            Cake cake;
+            size_t nameLen, descLen;
+            if (!file.read(reinterpret_cast<char*>(&nameLen), sizeof(nameLen))) break;
+            cake.name.resize(nameLen);
+            file.read(&cake.name[0], nameLen);
+            file.read(reinterpret_cast<char*>(&cake.price), sizeof(cake.price));
+            file.read(reinterpret_cast<char*>(&descLen), sizeof(descLen));
+            cake.description.resize(descLen);
+            file.read(&cake.description[0], descLen);
+            cakes.push_back(make_shared<Cake>(cake));
+        }
+        file.close();
+    }
+
+    void saveCakes() {
+        ofstream file(cakeFile, ios::binary | ios::trunc);
+        for (const auto& cake : cakes) {
+            size_t nameLen = cake->name.size();
+            size_t descLen = cake->description.size();
+            file.write(reinterpret_cast<const char*>(&nameLen), sizeof(nameLen));
+            file.write(cake->name.c_str(), nameLen);
+            file.write(reinterpret_cast<const char*>(&cake->price), sizeof(cake->price));
+            file.write(reinterpret_cast<const char*>(&descLen), sizeof(descLen));
+            file.write(cake->description.c_str(), descLen);
+        }
+        file.close();
+    }
+
+public:
+    CakeShopDatabase() {
+        loadCakes();
+    }
+
+    ~CakeShopDatabase() {
+        saveCakes();
+    }
+
+    void addCake(const string& name, double price, const string& description) {
+        shared_ptr<Cake> newCake = make_shared<Cake>(Cake{name, price, description});
+        cakes.push_back(newCake);
+        saveCakes();
+    }
+
+    void displayCakes() const {
+        for (const auto& cake : cakes) {
+            cout << "Cake: " << cake->name << " | Price per pound: $" << cake->price << " | Description: " << cake->description << endl;
+        }
+    }
+
+    shared_ptr<Cake> findCake(const string& name) {
+        for (const auto& cake : cakes) {
+            if (cake->name == name) {
+                return cake;
+            }
+        }
+        return nullptr;
+    }
+};
+
+void adminPanel(CakeShopDatabase& db) {
+    int choice;
+    do {
+        cout << "\nAdmin Panel:\n1. Add Cake\n2. View Cakes\n3. Exit\nEnter choice: ";
+        cin >> choice;
+        cin.ignore();
+
+        if (choice == 1) {
+            string name, description;
+            double price;
+            cout << "Enter cake name: ";
+            getline(cin, name);
+            cout << "Enter price per pound: ";
+            cin >> price;
+            cin.ignore();
+            cout << "Enter description: ";
+            getline(cin, description);
+            db.addCake(name, price, description);
+            cout << "Cake added successfully!\n";
+        } else if (choice == 2) {
+            db.displayCakes();
+        }
+    } while (choice != 3);
+}
+
+void customerPanel(CakeShopDatabase& db) {
+    int choice;
+    do {
+        cout << "\nCustomer Panel:\n1. View Cakes\n2. Buy Cake\n3. Exit\nEnter choice: ";
+        cin >> choice;
+        cin.ignore();
+
+        if (choice == 1) {
+            db.displayCakes();
+        } else if (choice == 2) {
+            shared_ptr<Order> order = make_shared<Order>();
+            int cakeCount;
+            cout << "How many cakes do you want to buy? ";
+            cin >> cakeCount;
+            cin.ignore();
+
+            for (int i = 0; i < cakeCount; i++) {
+                string name;
+                int pounds;
+                cout << "Enter the name of cake " << i + 1 << ": ";
+                getline(cin, name);
+                auto cake = db.findCake(name);
+                if (cake) {
+                    cout << "Enter number of pounds: ";
+                    cin >> pounds;
+                    cin.ignore();
+                    order->cakes.push_back(cake);
+                    order->pounds.push_back(pounds);
+                } else {
+                    cout << "Cake not found!\n";
+                }
+            }
+            order->calculateTotal();
+            cout << "Total cost of your order: $" << order->totalCost << "\n";
+            cout << "Order placed successfully!\n";
+        }
+    } while (choice != 3);
+}
+
+int main() {
+    CakeShopDatabase db;
+    int choice;
+    do {
+        cout << "\nWelcome to Cake Shop:\n1. Admin Panel\n2. Customer Panel\n3. Exit\nEnter choice: ";
+        cin >> choice;
+        cin.ignore();
+
+        if (choice == 1) {
+            adminPanel(db);
+        } else if (choice == 2) {
+            customerPanel(db);
+        }
+    } while (choice != 3);
+
+    cout << "Thank you for using Cake Shop Management System!\n";
+    return 0;
+}
